@@ -33,6 +33,9 @@ from sklearn.metrics import (
     roc_curve, precision_recall_curve
 )
 from imblearn.over_sampling import SMOTE
+import joblib
+import json
+from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -188,7 +191,7 @@ def prepare_data(df, target_col='Pago_atiempo', test_size=0.25, random_state=42,
     
     # Aplicar feature engineering
     print("\n1. Aplicando feature engineering...")
-    X_transformed, y, pipeline, feature_names = fit_transform_pipeline(df, target_col, save_path=None)
+    X_transformed, y, pipeline, feature_names = fit_transform_pipeline(df, target_col, save_path='models/preprocessing_pipeline.pkl')
     
     print(f"   ✓ Features transformadas: {X_transformed.shape[1]} features")
     print(f"   ✓ Total de registros: {X_transformed.shape[0]}")
@@ -227,7 +230,7 @@ def prepare_data(df, target_col='Pago_atiempo', test_size=0.25, random_state=42,
     print("DATOS PREPARADOS")
     print("="*80)
     
-    return X_train, X_test, y_train, y_test
+    return X_train, X_test, y_train, y_test, feature_names
 
 
 def train_multiple_models(X_train, y_train, X_test, y_test, use_smote_weights=False):
@@ -473,7 +476,7 @@ def main():
     print("ESTRATEGIA: APLICAR SMOTE")
     print("="*80)
     
-    X_train, X_test, y_train, y_test = prepare_data(
+    X_train, X_test, y_train, y_test, feature_names = prepare_data(
         df, 
         target_col='Pago_atiempo',
         test_size=0.25,
@@ -492,6 +495,42 @@ def main():
     
     # Seleccionar mejor modelo
     best_name, best_model, best_metrics = select_best_model(results, metric='f1_score')
+    
+    # Guardar mejor modelo y metadata
+    print("\n" + "="*80)
+    print("GUARDANDO MODELO Y METADATA")
+    print("="*80)
+    
+    timestamp = datetime.now().strftime("%Y%m%d")
+    model_filename = f"models/best_model_{best_name.replace(' ', '')}_{timestamp}.pkl"
+    
+    # Guardar modelo
+    joblib.dump(best_model, model_filename)
+    print(f"\n✓ Modelo guardado: {model_filename}")
+    
+    # Guardar metadata
+    metadata = {
+        "model_name": best_name,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "model_file": model_filename,
+        "metrics": {
+            "accuracy": float(best_metrics.get('accuracy', 0)),
+            "precision": float(best_metrics.get('precision', 0)),
+            "recall": float(best_metrics.get('recall', 0)),
+            "f1_score": float(best_metrics.get('f1_score', 0)),
+            "roc_auc": float(best_metrics.get('roc_auc', 0))
+        },
+        "features_used": feature_names.tolist() if hasattr(feature_names, 'tolist') else list(feature_names),
+        "total_samples": len(df),
+        "train_samples": int(len(X_train)),
+        "test_samples": int(len(X_test))
+    }
+    
+    metadata_filename = "models/model_metadata.json"
+    with open(metadata_filename, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=4, ensure_ascii=False)
+    print(f"✓ Metadata guardada: {metadata_filename}")
+    print("="*80)
     
     print("\n" + "="*80)
     print("✓ PROCESO DE MODELAMIENTO COMPLETADO EXITOSAMENTE")

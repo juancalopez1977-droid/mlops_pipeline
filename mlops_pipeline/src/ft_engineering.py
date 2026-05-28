@@ -421,7 +421,7 @@ def main():
     X_transformed, y, pipeline, feature_names = fit_transform_pipeline(
         df,
         target_col='Pago_atiempo',
-        save_path=None  # No guardar automáticamente
+        save_path='models/preprocessing_pipeline.pkl'  # Guardar pipeline para API
     )
     
     # Crear DataFrame con features transformadas

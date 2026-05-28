@@ -2,7 +2,7 @@
 
 > **Proyecto Integrador - Módulo 5: Fundamentos de Nube y Ciencia de Datos de Producción**  
 > **Carrera:** Ciencia de Datos - Soy Henry  
-> **Versión:** V1.2.0
+> **Versión:** V1.3.0
 
 ---
 
@@ -77,6 +77,12 @@ Desarrollar un **sistema completo de MLOps** que incluya:
 - Dashboard interactivo en Streamlit (`app_streamlit.py`)
 - Alertas automáticas y recomendaciones de acción
 
+#### ✅ Avance #4: Despliegue con API REST y Docker
+- API REST con FastAPI para disponibilizar el modelo (`model_deploy.py`)
+- Validación automática con modelos Pydantic
+- Dockerización completa del proyecto (Dockerfile + .dockerignore)
+- Imagen Docker lista para despliegue en producción
+
 ---
 
 ## 📁 Estructura del Proyecto
@@ -87,18 +93,26 @@ mlops_pipeline/
 ├── README.md                          # Este archivo - Documentación completa
 ├── requirements.txt                   # Dependencias del proyecto con versiones
 ├── Base_de_datos.xlsx                # Dataset principal (10,763 registros)
+├── Dockerfile                        # Configuración para imagen Docker
+├── .dockerignore                     # Archivos excluidos del build de Docker
+├── .gitignore                        # Archivos excluidos del repositorio
 │
 ├── mlops_pipeline/
+│   ├── __init__.py                   # Paquete Python principal
 │   └── src/                          # Código fuente del proyecto
-│       │
+│       ├── __init__.py               # Paquete Python de src
 │       ├── cargar_datos.py           # Módulo de carga y validación de datos
 │       ├── comprension_eda.ipynb     # Análisis exploratorio completo (50+ células)
 │       ├── ft_engineering.py         # Feature engineering con transformadores custom
 │       ├── model_training_evaluation.py   # Entrenamiento y evaluación de modelos
 │       ├── model_monitoring.py       # Sistema de detección de data drift
-│       └── app_streamlit.py          # Dashboard interactivo de monitoreo
-│
-└── .gitignore                        # Archivos excluidos del repositorio
+│       ├── app_streamlit.py          # Dashboard interactivo de monitoreo
+│       ├── model_deploy.py           # API REST con FastAPI para despliegue del modelo
+│       └── models/                   # Modelos entrenados (*.pkl, *.json) - no versionados
+│           ├── .gitkeep              # Mantener carpeta vacía en git
+│           ├── best_model_*.pkl      # Modelo entrenado (excluido de git)
+│           ├── preprocessing_pipeline.pkl  # Pipeline de preprocesamiento (excluido)
+│           └── model_metadata.json   # Metadatos del modelo (excluido)
 ```
 
 ---
@@ -337,6 +351,222 @@ Se abrirá automáticamente en el navegador en `http://localhost:8501`
    - Explicación detallada de cada métrica
    - Interpretación de umbrales
    - Recomendaciones de uso
+
+### 7️⃣ API REST con FastAPI
+
+**Archivo:** `model_deploy.py`
+
+```bash
+cd mlops_pipeline/src
+uvicorn model_deploy:app --host 0.0.0.0 --port 8000
+```
+
+La API se ejecutará en `http://localhost:8000`
+
+**⚠️ Para detener el servidor:** Presiona `Ctrl+C` en la terminal
+
+**Documentación Interactiva (Swagger UI):**
+- Accede a `http://localhost:8000/docs` para documentación automática
+- Prueba todos los endpoints directamente desde el navegador
+
+**Endpoints Disponibles:**
+
+#### 1. GET `/` - Información de la API
+
+**Respuesta:**
+```json
+{
+  "mensaje": "API de Predicción de Riesgo Crediticio",
+  "version": "1.3.0",
+  "modelo": "Decision Tree",
+  "f1_score": 1.0,
+  "documentacion": "/docs"
+}
+```
+
+#### 2. GET `/health` - Estado del Sistema
+
+**Respuesta:**
+```json
+{
+  "status": "healthy",
+  "modelo_cargado": true,
+  "pipeline_cargado": true,
+  "timestamp": "2026-05-27T21:18:54"
+}
+```
+
+#### 3. POST `/predict` - Predicción Individual
+
+**Request Body (23 campos requeridos):**
+```json
+{
+  "capital_prestado": 5000000,
+  "plazo_meses": 24,
+  "cuota_pactada": 250000,
+  "puntaje": 750,
+  "edad_cliente": 35,
+  "salario_cliente": 3000000,
+  "puntaje_datacredito": 720,
+  "cant_creditosvigentes": 2,
+  "total_otros_prestamos": 2000000,
+  "creditos_sectorCooperativo": 1,
+  "creditos_sectorReal": 0,
+  "saldo_mora": 0,
+  "saldo_mora_codeudor": 0,
+  "tipo_prestamo": "Consumo",
+  "tipo_laboral": "Dependiente",
+  "tendencia_ingresos": "Estable",
+  "fuente_ingreso": "Salario",
+  "fecha_prestamo": "2026-05-15"
+}
+```
+
+**Validaciones Automáticas (Pydantic):**
+- `capital_prestado`: >= 100,000
+- `plazo_meses`: >= 1
+- `cuota_pactada`: >= 0
+- `puntaje`, `puntaje_datacredito`: 0-1000 o null
+- `edad_cliente`: 18-100
+- `salario_cliente`: >= 0
+- Cantidades de créditos: >= 0
+- Saldos en mora: >= 0
+- Tipos categóricos: valores específicos validados
+- `fecha_prestamo`: formato ISO (YYYY-MM-DD)
+
+**Response:**
+```json
+{
+  "prediccion": 1,
+  "probabilidad_clase_0": 0.0,
+  "probabilidad_clase_1": 1.0,
+  "interpretacion": "APROBADO - Bajo riesgo de impago",
+  "modelo_usado": "Decision Tree",
+  "timestamp": "2026-05-27T22:30:15.123456"
+}
+```
+
+#### 4. POST `/predict/batch` - Predicción por Lotes
+
+**Request Body:**
+```json
+{
+  "casos": [
+    { "capital_prestado": 5000000, ... },
+    { "capital_prestado": 3000000, ... },
+    ...
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "total_casos": 5,
+  "predicciones": [
+    {
+      "caso_id": 0,
+      "prediccion": 1,
+      "probabilidad_clase_0": 0.0,
+      "probabilidad_clase_1": 1.0,
+      "interpretacion": "APROBADO - Bajo riesgo de impago"
+    },
+    ...
+  ],
+  "resumen": {
+    "aprobados": 4,
+    "rechazados": 1,
+    "tasa_aprobacion": 0.8
+  },
+  "modelo_usado": "Decision Tree",
+  "timestamp": "2026-05-27T22:35:20.654321"
+}
+```
+
+**Características de la API:**
+- ✅ Validación automática de entrada con Pydantic V2
+- ✅ Manejo de errores con códigos HTTP apropiados
+- ✅ Carga automática del mejor modelo entrenado
+- ✅ Documentación interactiva con Swagger UI
+- ✅ Logging detallado de inicio y carga de artefactos
+- ✅ Endpoints de salud para monitoreo
+
+### 8️⃣ Dockerización del Proyecto
+
+**Archivos:** `Dockerfile`, `.dockerignore`
+
+#### Construcción de la Imagen Docker
+
+```bash
+# Asegúrate de estar en el directorio raíz del proyecto
+docker build -t mlops-model:v1.3.0 .
+```
+
+**Proceso de build:**
+- Base: `python:3.11-slim` (ligera y optimizada)
+- Instalación de dependencias desde `requirements.txt`
+- Copia del código fuente y dataset
+- Copia explícita de modelos entrenados (`.pkl`, `.json`)
+- Exposición del puerto 8000
+- Comando de inicio: `uvicorn mlops_pipeline.src.model_deploy:app`
+
+**Tiempo estimado:** 2-3 minutos en primera ejecución, ~30 segundos en reconstrucciones (gracias a caché de layers)
+
+#### Ejecución del Contenedor
+
+```bash
+# Ejecutar contenedor en modo detached (-d)
+docker run -d -p 8000:8000 --name mlops-container mlops-model:v1.3.0
+
+# Verificar que el contenedor está corriendo
+docker ps
+
+# Ver logs del contenedor
+docker logs mlops-container
+
+# Detener el contenedor
+docker stop mlops-container
+
+# Eliminar el contenedor
+docker rm mlops-container
+```
+
+#### Verificación de la API en Docker
+
+Una vez el contenedor esté corriendo:
+1. Abre tu navegador en `http://localhost:8000/docs`
+2. Prueba el endpoint GET `/health` - debe retornar status "healthy"
+3. Prueba una predicción con POST `/predict`
+
+#### Contenido de la Imagen Docker
+
+**Incluido:**
+- ✅ Código fuente completo (`mlops_pipeline/src/`)
+- ✅ Modelos entrenados (`*.pkl`, `*.json`)
+- ✅ Dataset principal (`Base_de_datos.xlsx`)
+- ✅ Dependencias Python (desde `requirements.txt`)
+
+**Excluido (`.dockerignore`):**
+- ❌ Entorno virtual (`venv/`)
+- ❌ Cache de Python (`__pycache__/`)
+- ❌ Notebooks (`.ipynb`)
+- ❌ Archivos de configuración local (`.env`, `secrets.ini`)
+- ❌ Documentación (`.md`)
+- ❌ Archivos de sistema (`.git/`, `.DS_Store`)
+
+**Tamaño de la imagen:** ~700 MB (optimizada con `python:3.11-slim`)
+
+#### Health Checks Automáticos
+
+El contenedor incluye health checks integrados:
+- Verifica que Uvicorn esté respondiendo en el puerto 8000
+- Comprueba que el modelo esté cargado correctamente
+- Estado visible con `docker ps` (columna STATUS)
+
+**Ejemplo de STATUS:**
+```
+Up 2 minutes (healthy)
+```
 
 ---
 
