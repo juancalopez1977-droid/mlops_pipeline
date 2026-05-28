@@ -207,6 +207,7 @@ mlops_pipeline/src/models/*.joblib
 mlops_pipeline/src/models/*.h5
 mlops_pipeline/src/models/*.pt
 mlops_pipeline/src/models/*.pth
+mlops_pipeline/src/models/*.json
 
 #Data
 Base_de_datos.xlsx
